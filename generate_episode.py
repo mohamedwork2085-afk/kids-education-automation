@@ -5,6 +5,10 @@ from pathlib import Path
 from google import genai
 from google.genai import types
 
+# =========================
+# إعداد Gemini
+# =========================
+
 api_key = os.environ.get("GEMINI_API_KEY")
 
 if not api_key:
@@ -13,19 +17,30 @@ if not api_key:
 client = genai.Client(
     api_key=api_key,
     http_options=types.HttpOptions(
-    timeout=60000,
-    retry_options=types.HttpRetryOptions(
-        attempts=1
-    )
+        timeout=180000,
+        retry_options=types.HttpRetryOptions(
+            attempts=1
+        )
     )
 )
 
 MODEL = "gemini-flash-latest"
 
-def ask_gemini(prompt):
-    for attempt in range(1, 4):
+# =========================
+# دالة الاتصال وإعادة المحاولة
+# =========================
+
+def ask_gemini(prompt, task_name="Gemini request"):
+
+    max_attempts = 4
+
+    for attempt in range(1, max_attempts + 1):
+
         try:
-            print(f"Gemini request: attempt {attempt}/3", flush=True)
+            print(
+                f"{task_name}: attempt {attempt}/{max_attempts}",
+                flush=True
+            )
 
             response = client.models.generate_content(
                 model=MODEL,
@@ -37,19 +52,44 @@ def ask_gemini(prompt):
             )
 
             if response.text:
+                print("Gemini response received successfully.", flush=True)
                 return response.text
 
-            raise RuntimeError("Empty response from Gemini")
+            raise RuntimeError("Gemini returned an empty response")
 
         except Exception as error:
-            print(f"Request failed: {error}")
 
-            if attempt == 3:
+            print(f"Request failed: {error}", flush=True)
+
+            if attempt == max_attempts:
                 raise
 
-            time.sleep(attempt * 10)
+            wait_time = attempt * 15
 
+            print(
+                f"Waiting {wait_time} seconds before retry...",
+                flush=True
+            )
+
+            time.sleep(wait_time)
+
+
+# =========================
+# تجهيز مجلد النتائج
+# =========================
+
+output_dir = Path("output")
+output_dir.mkdir(exist_ok=True)
+
+draft_path = output_dir / "draft.txt"
+episode_path = output_dir / "episode.txt"
+review_path = output_dir / "review_info.txt"
+
+
+# =========================
 # المرحلة الأولى: كتابة الحلقة
+# =========================
+
 writing_prompt = """
 أنت كاتب ومعدّ برامج تعليمية محترف للأطفال.
 
@@ -88,16 +128,24 @@ writing_prompt = """
 """
 
 print("Writing first draft...", flush=True)
-draft = ask_gemini(writing_prompt)
 
-Path("output").mkdir(exist_ok=True)
+draft = ask_gemini(
+    writing_prompt,
+    task_name="Writing first draft"
+)
 
-Path("output/draft.txt").write_text(
+draft_path.write_text(
     draft,
     encoding="utf-8"
 )
 
-# المرحلة الثانية: المراجعة العلمية والتحرير
+print("Draft saved successfully.", flush=True)
+
+
+# =========================
+# المرحلة الثانية: المراجعة العلمية
+# =========================
+
 review_prompt = f"""
 أنت مراجع علمي ومحرر متخصص في برامج الأطفال.
 
@@ -119,25 +167,39 @@ review_prompt = f"""
 لا تكتب تقريراً فقط؛ أريد النسخة النهائية كاملة.
 
 الحلقة:
+
 {draft}
 """
 
 print("Reviewing and correcting the episode...", flush=True)
-final_episode = ask_gemini(review_prompt)
+
+final_episode = ask_gemini(
+    review_prompt,
+    task_name="Reviewing episode"
+)
+
+
+# =========================
+# المرحلة الثالثة: حفظ الحلقة النهائية
+# =========================
 
 word_count = len(final_episode.split())
 
-Path("output/episode.txt").write_text(
+episode_path.write_text(
     final_episode,
     encoding="utf-8"
 )
 
-Path("output/review_info.txt").write_text(
+review_path.write_text(
+    f"Model: {MODEL}\n"
     f"Final word count: {word_count}\n"
+    "Scientific review: Completed\n"
     "Note: Word count is an estimate, not a measured narration duration.\n",
     encoding="utf-8"
 )
 
-print("Final episode generated and reviewed!")
+print("\n================================")
+print("FINAL EPISODE GENERATED!")
 print(f"Approximate word count: {word_count}")
-print("Saved to output/episode.txt")
+print(f"Saved to: {episode_path}")
+print("================================", flush=True)
