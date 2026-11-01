@@ -3,3 +3,5 @@ edge-tts
 moviepy
 pillow
 numpy
+arabic-reshaper
+python-bidi
