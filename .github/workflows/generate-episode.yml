@@ -33,9 +33,12 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python generate_audio.py
 
-      - name: Save episode and audio
+      - name: Generate video
+        run: python generate_video.py
+
+      - name: Save all outputs
         uses: actions/upload-artifact@v4
         with:
-          name: educational-episode
+          name: complete-educational-video
           path: output/
           retention-days: 7
