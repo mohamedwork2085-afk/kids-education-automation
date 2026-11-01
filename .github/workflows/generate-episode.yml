@@ -1,3 +1,4 @@
+
 name: Generate Educational Episode
 
 on:
@@ -27,9 +28,14 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python generate_episode.py
 
-      - name: Save episode
+      - name: Generate Arabic narration
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python generate_audio.py
+
+      - name: Save episode and audio
         uses: actions/upload-artifact@v4
         with:
           name: educational-episode
-          path: output/episode.txt
+          path: output/
           retention-days: 7
