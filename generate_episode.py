@@ -1,3 +1,4 @@
+
 import os
 import time
 from pathlib import Path
@@ -12,7 +13,7 @@ if not api_key:
 client = genai.Client(
     api_key=api_key,
     http_options=types.HttpOptions(
-        timeout=120000,
+        timeout=180000,
         retry_options=types.HttpRetryOptions(
             attempts=4,
             initial_delay=2,
@@ -21,61 +22,125 @@ client = genai.Client(
     )
 )
 
-prompt = """
+MODEL = "gemini-flash-latest"
+
+def ask_gemini(prompt):
+    for attempt in range(1, 4):
+        try:
+            print(f"Gemini request: attempt {attempt}/3")
+
+            response = client.models.generate_content(
+                model=MODEL,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    max_output_tokens=9000,
+                    temperature=0.6
+                )
+            )
+
+            if response.text:
+                return response.text
+
+            raise RuntimeError("Empty response from Gemini")
+
+        except Exception as error:
+            print(f"Request failed: {error}")
+
+            if attempt == 3:
+                raise
+
+            time.sleep(attempt * 10)
+
+
+# المرحلة الأولى: كتابة الحلقة
+writing_prompt = """
 أنت كاتب ومعدّ برامج تعليمية محترف للأطفال.
 
-اكتب حلقة تعليمية أصلية باللغة العربية البسيطة للأطفال من 5 إلى 9 سنوات.
+اكتب حلقة أصلية باللغة العربية الفصحى المبسطة
+المفهومة للأطفال من عمر 5 إلى 9 سنوات.
 
-الشروط:
-- مدة الحلقة من 8 إلى 10 دقائق.
-- اختر بنفسك موضوعاً علمياً أو تعليمياً ممتعاً.
-- ابدأ بمقدمة تشد انتباه الطفل.
-- اشرح المعلومات بأمثلة من الحياة اليومية.
-- اجعل الأحداث مترابطة ومشوقة.
-- قسّم الحلقة إلى 8 مشاهد متتابعة.
-- اكتب نص الراوي كاملاً لكل مشهد.
-- اقترح وصفاً بصرياً لكل مشهد.
-- تأكد من صحة المعلومات.
-- اجعل المحتوى آمناً ومناسباً للأطفال.
-- اختم بمراجعة بسيطة لما تعلمه الطفل.
+شروط الحلقة:
+- من 900 إلى 1100 كلمة منطوقة تقريباً.
+- 8 مشاهد مترابطة بتسلسل قصصي واضح.
+- مدة مستهدفة 8 إلى 10 دقائق حسب سرعة الراوي.
+- اختر موضوعاً تعليمياً مناسباً بنفسك.
+- ابدأ بلغز أو سؤال يجذب الطفل.
+- اجعل المقدم يتحدث إلى الطفل مباشرة.
+- أضف أسئلة تفاعلية ووقفات للتفكير.
+- أضف تجربة آمنة يمكن تنفيذها بمساعدة شخص بالغ.
+- كل مشهد يقدم معلومة جديدة.
+- لا تكرر الفكرة نفسها لزيادة طول الحلقة.
+- اكتب وصفاً بصرياً مفصلاً لكل مشهد.
+- اكتب نص الراوي كاملاً دون اختصار.
+- ميّز بوضوح بين الحقائق العلمية والقصص التخيلية.
+- لا تخترع أحداثاً تاريخية أو علمية.
+- لا تستخدم تشبيهاً قد يجعل الطفل يفهم المعلومة بشكل خاطئ.
+- اختم بتلخيص وتحدٍ بسيط للطفل.
 
-اكتب عنوان الحلقة والفئة العمرية والهدف التعليمي،
-ثم المشاهد الثمانية والخاتمة.
+لكل مشهد اكتب:
+1. عنوان المشهد.
+2. وصف الصورة والحركة.
+3. نص الراوي كاملاً.
+4. المؤثرات الصوتية المقترحة.
+
+في النهاية أضف:
+- عنوان الحلقة.
+- العمر المستهدف.
+- الهدف التعليمي.
+- قائمة الحقائق العلمية التي اعتمدت عليها.
 """
 
-response = None
-
-for attempt in range(1, 4):
-    try:
-        print(f"Generating episode, attempt {attempt}/3...")
-
-        response = client.models.generate_content(
-            model="gemini-flash-latest",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                max_output_tokens=6000,
-                temperature=0.7
-            )
-        )
-
-        if response.text:
-            break
-
-        raise RuntimeError("Gemini returned an empty response")
-
-    except Exception as error:
-        print(f"Attempt {attempt} failed: {error}")
-
-        if attempt == 3:
-            raise
-
-        time.sleep(attempt * 10)
+print("Writing first draft...")
+draft = ask_gemini(writing_prompt)
 
 Path("output").mkdir(exist_ok=True)
-Path("output/episode.txt").write_text(
-    response.text,
+
+Path("output/draft.txt").write_text(
+    draft,
     encoding="utf-8"
 )
 
-print("Episode generated successfully!")
-print(response.text)
+# المرحلة الثانية: المراجعة العلمية والتحرير
+review_prompt = f"""
+أنت مراجع علمي ومحرر متخصص في برامج الأطفال.
+
+راجع الحلقة التالية مراجعة دقيقة.
+
+المطلوب:
+1. اكتشف الأخطاء العلمية والتاريخية.
+2. اكتشف المعلومات المضللة أو التشبيهات غير الدقيقة.
+3. صحح كل خطأ داخل نص الحلقة نفسه.
+4. حافظ على القصة والتشويق والأسلوب المناسب للأطفال.
+5. لا تضف حقائق غير متأكد منها.
+6. لا تحذف المشاهد أو تختصر الحلقة بشدة.
+7. حافظ على طول قريب من 900 إلى 1100 كلمة منطوقة.
+8. تأكد أن التجارب آمنة ومفهومة.
+9. لا تدّع أن المدة 8 إلى 10 دقائق إلا إذا كان حجم النص مناسباً فعلاً.
+10. إذا كانت معلومة غير مؤكدة، أعد صياغتها بحذر أو احذفها.
+
+أعد كتابة الحلقة كاملة بعد التصحيح.
+لا تكتب تقريراً فقط؛ أريد النسخة النهائية كاملة.
+
+الحلقة:
+{draft}
+"""
+
+print("Reviewing and correcting the episode...")
+final_episode = ask_gemini(review_prompt)
+
+word_count = len(final_episode.split())
+
+Path("output/episode.txt").write_text(
+    final_episode,
+    encoding="utf-8"
+)
+
+Path("output/review_info.txt").write_text(
+    f"Final word count: {word_count}\n"
+    "Note: Word count is an estimate, not a measured narration duration.\n",
+    encoding="utf-8"
+)
+
+print("Final episode generated and reviewed!")
+print(f"Approximate word count: {word_count}")
+print("Saved to output/episode.txt")
