@@ -20,23 +20,15 @@ client = genai.Client(
     )
 )
 
-
-MODELS = [
-    "gemini-flash-latest",
-    "gemini-3.5-flash-lite",
-    "gemini-3.1-flash-lite",
-    "gemini-2.5-flash",
-]
+MODEL = "gemini-flash-latest"
 
 def ask_gemini(prompt):
-    last_error = None
-
-    for model in MODELS:
+    for attempt in range(1, 4):
         try:
-            print(f"Trying model: {model}", flush=True)
+            print(f"Gemini request: attempt {attempt}/3", flush=True)
 
             response = client.models.generate_content(
-                model=model,
+                model=MODEL,
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     max_output_tokens=9000,
@@ -45,36 +37,17 @@ def ask_gemini(prompt):
             )
 
             if response.text:
-                print(f"SUCCESS: {model}", flush=True)
                 return response.text
 
             raise RuntimeError("Empty response from Gemini")
 
         except Exception as error:
-            last_error = error
-            error_text = str(error).lower()
+            print(f"Request failed: {error}")
 
-            quota_error = (
-                "429" in error_text
-                or "resource_exhausted" in error_text
-                or "quota" in error_text
-            )
+            if attempt == 3:
+                raise
 
-            unavailable_model = (
-                "404" in error_text
-                or "not found" in error_text
-                or "not supported" in error_text
-            )
-
-            if quota_error or unavailable_model:
-                print(f"Failed model: {model} - {error}", flush=True)
-                continue
-
-            raise
-
-    raise RuntimeError(
-        f"All Gemini models failed. Last error: {last_error}"
-    )
+            time.sleep(attempt * 10)
 
 # المرحلة الأولى: كتابة الحلقة
 writing_prompt = """
