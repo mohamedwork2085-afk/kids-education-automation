@@ -1,51 +1,81 @@
 import os
+import time
 from pathlib import Path
 from google import genai
+from google.genai import types
 
 api_key = os.environ.get("GEMINI_API_KEY")
+
 if not api_key:
     raise RuntimeError("GEMINI_API_KEY is missing")
 
-client = genai.Client(api_key=api_key)
+client = genai.Client(
+    api_key=api_key,
+    http_options=types.HttpOptions(
+        timeout=120000,
+        retry_options=types.HttpRetryOptions(
+            attempts=4,
+            initial_delay=2,
+            max_delay=15
+        )
+    )
+)
 
 prompt = """
 أنت كاتب ومعدّ برامج تعليمية محترف للأطفال.
 
-اكتب حلقة تعليمية أصلية باللغة العربية البسيطة المناسبة للأطفال من 5 إلى 9 سنوات.
+اكتب حلقة تعليمية أصلية باللغة العربية البسيطة للأطفال من 5 إلى 9 سنوات.
 
 الشروط:
 - مدة الحلقة من 8 إلى 10 دقائق.
-- موضوع الحلقة: اختر بنفسك موضوعاً علمياً أو تعليمياً ممتعاً.
+- اختر بنفسك موضوعاً علمياً أو تعليمياً ممتعاً.
 - ابدأ بمقدمة تشد انتباه الطفل.
-- اشرح المعلومة بطريقة سهلة وبأمثلة من الحياة اليومية.
-- اجعل الأحداث مترابطة وفيها تشويق وأسئلة للطفل.
+- اشرح المعلومات بأمثلة من الحياة اليومية.
+- اجعل الأحداث مترابطة ومشوقة.
 - قسّم الحلقة إلى 8 مشاهد متتابعة.
 - اكتب نص الراوي كاملاً لكل مشهد.
-- اقترح وصفاً بصرياً لكل مشهد ليسهل تحويله إلى رسوم متحركة.
-- تأكد من صحة المعلومات علمياً.
-- لا تستخدم معلومات مخيفة أو محتوى غير مناسب للأطفال.
+- اقترح وصفاً بصرياً لكل مشهد.
+- تأكد من صحة المعلومات.
+- اجعل المحتوى آمناً ومناسباً للأطفال.
 - اختم بمراجعة بسيطة لما تعلمه الطفل.
 
-اكتب النتيجة بهذا الترتيب:
-عنوان الحلقة
-الفئة العمرية
-الهدف التعليمي
-نص الحلقة مقسماً إلى 8 مشاهد
-خاتمة الحلقة
+اكتب عنوان الحلقة والفئة العمرية والهدف التعليمي،
+ثم المشاهد الثمانية والخاتمة.
 """
 
-response = client.models.generate_content(
-    model="gemini-flash-latest",
-    contents=prompt
-)
+response = None
 
-episode = response.text
+for attempt in range(1, 4):
+    try:
+        print(f"Generating episode, attempt {attempt}/3...")
 
-if not episode:
-    raise RuntimeError("Gemini returned an empty response")
+        response = client.models.generate_content(
+            model="gemini-flash-latest",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                max_output_tokens=6000,
+                temperature=0.7
+            )
+        )
+
+        if response.text:
+            break
+
+        raise RuntimeError("Gemini returned an empty response")
+
+    except Exception as error:
+        print(f"Attempt {attempt} failed: {error}")
+
+        if attempt == 3:
+            raise
+
+        time.sleep(attempt * 10)
 
 Path("output").mkdir(exist_ok=True)
-Path("output/episode.txt").write_text(episode, encoding="utf-8")
+Path("output/episode.txt").write_text(
+    response.text,
+    encoding="utf-8"
+)
 
 print("Episode generated successfully!")
-print(episode)
+print(response.text)
