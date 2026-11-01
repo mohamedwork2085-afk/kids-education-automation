@@ -13,12 +13,10 @@ if not api_key:
 client = genai.Client(
     api_key=api_key,
     http_options=types.HttpOptions(
-        timeout=180000,
-        retry_options=types.HttpRetryOptions(
-            attempts=4,
-            initial_delay=2,
-            max_delay=15
-        )
+    timeout=60000,
+    retry_options=types.HttpRetryOptions(
+        attempts=1
+    )
     )
 )
 
@@ -27,7 +25,7 @@ MODEL = "gemini-flash-latest"
 def ask_gemini(prompt):
     for attempt in range(1, 4):
         try:
-            print(f"Gemini request: attempt {attempt}/3")
+            print(f"Gemini request: attempt {attempt}/3", flush=True)
 
             response = client.models.generate_content(
                 model=MODEL,
@@ -90,7 +88,7 @@ writing_prompt = """
 - قائمة الحقائق العلمية التي اعتمدت عليها.
 """
 
-print("Writing first draft...")
+print("Writing first draft...", flush=True)
 draft = ask_gemini(writing_prompt)
 
 Path("output").mkdir(exist_ok=True)
@@ -125,7 +123,7 @@ review_prompt = f"""
 {draft}
 """
 
-print("Reviewing and correcting the episode...")
+print("Reviewing and correcting the episode...", flush=True)
 final_episode = ask_gemini(review_prompt)
 
 word_count = len(final_episode.split())
