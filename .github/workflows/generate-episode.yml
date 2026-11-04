@@ -1,41 +1,35 @@
-
 name: Generate Educational Episode
-
 on:
   workflow_dispatch:
-
 permissions:
   contents: read
-
 jobs:
   generate:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 360
     steps:
       - name: Download project
         uses: actions/checkout@v4
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
+      - name: Install Blender and FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y blender ffmpeg
       - name: Install requirements
         run: pip install -r requirements.txt
-
       - name: Generate episode
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python generate_episode.py
-
       - name: Generate Arabic narration
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python generate_audio.py
-
-      - name: Generate video
+      - name: Generate 3D cartoon video
         run: python generate_video.py
-
       - name: Save all outputs
         uses: actions/upload-artifact@v4
         with:
