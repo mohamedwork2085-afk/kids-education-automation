@@ -37,11 +37,6 @@ def scene(i,path):
  for arm,side in arms:
   for frame,angle in [(1,-.3),(13,-.9),(25,-.3),(37,.1),(49,-.3)]:
    arm.rotation_euler[1]=side*angle; arm.keyframe_insert(data_path="rotation_euler",frame=frame)
- for ob in bpy.data.objects:
-  if ob.animation_data and ob.animation_data.action:
-   for fc in ob.animation_data.action.fcurves:
-    for k in fc.keyframe_points: k.interpolation="SINE"
-    fc.modifiers.new("CYCLES")
  bpy.ops.object.camera_add(location=(0,-13,5)); cam=bpy.context.object; look(cam,(0,0,2)); cam.data.type="ORTHO"; cam.data.ortho_scale=12.5; bpy.context.scene.camera=cam
  bpy.ops.object.light_add(type="AREA",location=(-4,-5,8)); lamp=bpy.context.object; lamp.data.energy=1500; lamp.data.shape="DISK"; lamp.data.size=7; look(lamp,(0,0,1.5))
  s=bpy.context.scene; s.render.engine="BLENDER_EEVEE_NEXT"; s.render.resolution_x=960; s.render.resolution_y=540; s.render.resolution_percentage=100; s.render.fps=12; s.frame_start=1; s.frame_end=48
