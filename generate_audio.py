@@ -1,6 +1,7 @@
-
 import os
 import asyncio
+import random
+import re
 import time
 from pathlib import Path
 
@@ -17,16 +18,67 @@ client = genai.Client(
     api_key=API_KEY,
     http_options=types.HttpOptions(
         timeout=180000,
-        retry_options=types.HttpRetryOptions(
-            attempts=4,
-            initial_delay=2,
-            max_delay=15
-        )
+        # Retries are handled below so we can switch models deliberately.
+        retry_options=types.HttpRetryOptions(attempts=1)
     )
 )
 
-MODEL = "gemini-flash-latest"
+PRIMARY_MODEL = "gemini-3.8-flash"
+FALLBACK_MODEL = "gemini-3.5-flash-lite"
+MODELS = (PRIMARY_MODEL, FALLBACK_MODEL)
 VOICE = "ar-EG-ShakirNeural"
+MAX_ATTEMPTS_PER_MODEL = 3
+RETRY_DELAYS_SECONDS = (5, 15)
+
+
+def is_temporary_error(error):
+    """Return True only for errors that may succeed on a later attempt/model."""
+    message = str(error).lower()
+
+    # Authentication, permission, and model-name/configuration errors are not
+    # fixed by retrying or switching models, so surface them immediately.
+    permanent_markers = (
+        "api key not valid",
+        "invalid api key",
+        "unauthenticated",
+        "permission denied",
+        "forbidden",
+        "model not found",
+        "not_found",
+        "does not exist",
+        "unsupported model",
+    )
+    if any(marker in message for marker in permanent_markers):
+        return False
+
+    status = getattr(error, "code", None)
+    if status is None:
+        status = getattr(error, "status_code", None)
+    if status is None:
+        status = getattr(error, "status", None)
+
+    try:
+        status = int(status)
+    except (TypeError, ValueError):
+        status = None
+
+    if status in (408, 429, 500, 502, 503, 504):
+        return True
+
+    temporary_markers = (
+        "unavailable",
+        "resource_exhausted",
+        "resource exhausted",
+        "rate limit",
+        "too many requests",
+        "timed out",
+        "timeout",
+        "temporarily",
+        "connection reset",
+        "service unavailable",
+        "internal server error",
+    )
+    return any(marker in message for marker in temporary_markers)
 
 
 def extract_narration(episode):
@@ -46,29 +98,59 @@ def extract_narration(episode):
 {episode}
 """
 
-    for attempt in range(1, 4):
-        try:
-            response = client.models.generate_content(
-                model=MODEL,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    max_output_tokens=9000,
-                    temperature=0.2
+    last_error = None
+
+    for model in MODELS:
+        print(f"Using Gemini model: {model}")
+
+        for attempt in range(1, MAX_ATTEMPTS_PER_MODEL + 1):
+            try:
+                response = client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        max_output_tokens=9000,
+                        temperature=0.2
+                    )
                 )
+
+                narration = response.text
+                if narration and narration.strip():
+                    print(f"Narration extracted successfully with {model}.")
+                    return narration.strip()
+
+                raise RuntimeError(
+                    f"Gemini returned an empty narration response ({model})"
+                )
+
+            except Exception as error:
+                last_error = error
+                print(
+                    f"{model} attempt {attempt}/{MAX_ATTEMPTS_PER_MODEL} "
+                    f"failed: {error}"
+                )
+
+                # Do not retry permanent errors or silently hide configuration
+                # problems by trying a different model.
+                if not is_temporary_error(error):
+                    raise
+
+                if attempt < MAX_ATTEMPTS_PER_MODEL:
+                    delay = RETRY_DELAYS_SECONDS[attempt - 1]
+                    delay += random.uniform(0, 2)
+                    print(f"Temporary error. Retrying in {delay:.1f} seconds...")
+                    time.sleep(delay)
+
+        if model != FALLBACK_MODEL:
+            print(
+                f"{model} is still unavailable after retries. "
+                f"Switching to fallback model: {FALLBACK_MODEL}"
             )
 
-            if response.text:
-                return response.text
-
-            raise RuntimeError("Empty narration response")
-
-        except Exception as error:
-            print(f"Extraction attempt {attempt} failed: {error}")
-
-            if attempt == 3:
-                raise
-
-            time.sleep(attempt * 10)
+    raise RuntimeError(
+        "Both Gemini models failed to extract narration. "
+        f"Last error: {last_error}"
+    ) from last_error
 
 
 async def create_audio(text):
@@ -87,7 +169,6 @@ def main():
     output_dir.mkdir(exist_ok=True)
 
     episode_path = output_dir / "episode.txt"
-
     if not episode_path.exists():
         raise FileNotFoundError("output/episode.txt not found")
 
@@ -99,10 +180,10 @@ def main():
     if len(narration.split()) < 100:
         raise RuntimeError("Extracted narration is too short")
 
-    (output_dir / "narration.txt").write_text(
-        narration,
-        encoding="utf-8"
-    )
+    # Save the text before TTS so it remains available if audio generation fails.
+    narration_path = output_dir / "narration.txt"
+    narration_path.write_text(narration, encoding="utf-8")
+    print(f"Narration saved: {narration_path}")
 
     print("Generating Arabic voice...")
     asyncio.run(create_audio(narration))
