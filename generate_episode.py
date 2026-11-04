@@ -24,7 +24,7 @@ client = genai.Client(
     )
 )
 
-MODEL = "gemini-flash-latest"
+MODEL = "gemini-3.5-flash-lite"
 
 # =========================
 # دالة الاتصال وإعادة المحاولة
