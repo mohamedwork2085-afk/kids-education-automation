@@ -11,7 +11,7 @@ API_KEY = os.environ.get("GEMINI_API_KEY")
 if not API_KEY:
     raise SystemExit("Missing GEMINI_API_KEY GitHub secret.")
 
-MODEL = os.environ.get("GEMINI_MODEL") or "gemini-2.5-flash"
+MODEL = os.environ.get("GEMINI_MODEL") or "gemini-3.8-flash"
 client = genai.Client(api_key=API_KEY)
 
 prompt = """
