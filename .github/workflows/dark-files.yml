@@ -1,0 +1,40 @@
+name: DARK FILES AI - Daily video factory
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 18 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: feature/dark-files-ai
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Python packages
+        run: pip install -r dark-files-ai/requirements.txt
+      - name: Generate documentary script
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+        run: python dark-files-ai/generate_episode.py
+      - name: Produce narration and videos
+        run: python dark-files-ai/render_video.py
+      - name: Upload finished videos
+        uses: actions/upload-artifact@v4
+        with:
+          name: dark-files-ai-${{ github.run_number }}
+          path: dark-files-ai/output/
+          retention-days: 7
